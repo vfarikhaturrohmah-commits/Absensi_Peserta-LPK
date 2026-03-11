@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Absensi Scanner - LPK Takashi Japan</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            background: #bc002d; 
+            margin: 0; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            overflow: hidden;
+        }
+        .scan-container { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 25px; 
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3); 
+            text-align: center; 
+            width: 90%; 
+            max-width: 450px; 
+        }
+        h1 { 
+            color: #bc002d; 
+            margin-bottom: 20px; 
+            font-size: 22px; 
+            text-transform: uppercase; 
+            line-height: 1.2;
+        }
+        #reader { 
+            width: 100%; 
+            border-radius: 15px; 
+            overflow: hidden; 
+            background: #000; 
+            border: 4px solid #f0f0f0; 
+        }
+        #msg { 
+            margin-top: 20px; 
+            font-size: 1.2em; 
+            font-weight: bold; 
+            min-height: 2.5em; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1.4;
+        }
+        .hint { 
+            color: #888; 
+            margin-top: 15px; 
+            font-size: 13px; 
+        }
+    </style>
+</head>
+<body>
+
+<div class="scan-container">
+    <h1>Selamat Datang<br>LPK TAKASHI JAPAN</h1>
+    <div id="reader"></div>
+    <div id="msg">Silakan Scan Kartu Anda</div>
+    <p class="hint">Pastikan QR Code terlihat jelas di kamera</p>
+</div>
+
+<script>
+    // 1. Inisialisasi Scanner & Suara Beep
+    const scanner = new Html5Qrcode("reader");
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+    const beep = new Audio('https://www.soundjay.com/buttons/button-20.mp3');
+
+    // 2. Fungsi Utama saat QR Terdeteksi
+    function onScanSuccess(decodedText) {
+        const name = decodedText.trim();
+        const now = new Date();
+        const time = now.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'});
+        const date = now.toLocaleDateString('id-ID'); 
+        const msgBox = document.getElementById('msg');
+
+        // Ambil data dari penyimpanan browser
+        let db = JSON.parse(localStorage.getItem('takashi_master_db')) || [];
+        
+        // CARI: Apakah nama ini sudah ada di daftar hari ini?
+        let student = db.find(s => s.name === name && s.date === date);
+
+        if (!student) {
+            // --- JIKA BELUM ABSEN (SCAN PERTAMA/PAGI) ---
+            db.push({ 
+                date: date, 
+                name: name, 
+                in: time, 
+                out: "--:--", 
+                status: "Hadir" 
+            });
+            msgBox.innerHTML = `<span style="color:green">KONNICHIWA, ${name}!<br>Absen Masuk: ${time}</span>`;
+        } 
+        else if (student.out === "--:--") {
+            // --- JIKA SUDAH MASUK, TAPI BELUM PULANG (SCAN KEDUA/SORE) ---
+            student.out = time;
+            student.status = "Pulang";
+            msgBox.innerHTML = `<span style="color:blue">OTSUKARESAMA, ${name}!<br>Absen Pulang: ${time}</span>`;
+        } 
+        else {
+            // --- JIKA SUDAH SCAN MASUK & PULANG ---
+            msgBox.innerHTML = `<span style="color:orange">${name}<br>Sudah Absen Masuk & Pulang Hari Ini</span>`;
+        }
+
+        // Jalankan suara dan simpan data
+        beep.play();
+        localStorage.setItem('takashi_master_db', JSON.stringify(db));
+
+        // Hentikan scanner sebentar agar tidak memproses data yang sama terus-menerus
+        scanner.pause();
+        setTimeout(() => { 
+            scanner.resume(); 
+            msgBox.innerHTML = "Silakan Scan Kartu Anda";
+        }, 3500); // Tunggu 3,5 detik sebelum scan berikutnya
+    }
+
+    // 3. Jalankan Kamera
+    scanner.start({ facingMode: "user" }, config, onScanSuccess)
+    .catch(err => {
+        document.getElementById('msg').innerHTML = `<span style="color:white">Kamera tidak ditemukan atau izin ditolak.</span>`;
+    });
+</script>
+
+</body>
+</html>

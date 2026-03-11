@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin LPK Takashi - Dashboard</title>
+    <style>
+        :root { --jp-red: #bc002d; --dark: #2d3436; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        
+        /* Layar Login */
+        #login-screen { background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); text-align: center; width: 350px; }
+        #login-screen input { width: 90%; padding: 12px; margin-bottom: 15px; border: 1px solid #ddd; border-radius: 8px; text-align: center; }
+        #login-screen button { width: 100%; padding: 12px; background: var(--jp-red); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+
+        /* Konten Dashboard Utama */
+        #admin-content { display: none; width: 100%; padding: 20px; }
+        .admin-card { max-width: 1100px; margin: auto; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .header-section { display: flex; justify-content: space-between; align-items: center; border-bottom: 4px solid var(--jp-red); padding-bottom: 15px; margin-bottom: 20px; }
+        
+        .section-box { background: #f8f9fa; padding: 15px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #eee; }
+        #student-list-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; max-height: 100px; overflow-y: auto; background: #fff; padding: 10px; border-radius: 8px; border: 1px inset #eee; }
+        .tag { background: #eee; padding: 4px 10px; border-radius: 15px; font-size: 12px; border: 1px solid #ddd; }
+
+        .table-container { max-height: 400px; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: var(--dark); color: white; position: sticky; top: 0; padding: 12px; z-index: 10; }
+        td { padding: 12px; border-bottom: 1px solid #eee; text-align: center; font-size: 14px; }
+        
+        .badge { padding: 5px 10px; border-radius: 4px; font-weight: bold; font-size: 11px; text-transform: uppercase; }
+        .hadir { background: #d4edda; color: #155724; }
+        .pulang { background: #cce5ff; color: #004085; }
+
+        .btn { padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; color: white; text-decoration: none; display: inline-block; }
+        .btn-rekap { background: #0984e3; }
+        .btn-logout { background: #636e72; }
+    </style>
+</head>
+<body>
+
+<div id="login-screen">
+    <h2 style="color:var(--jp-red)">LOGIN ADMIN</h2>
+    <input type="password" id="passInput" placeholder="Password...">
+    <button onclick="checkPassword()">MASUK</button>
+</div>
+
+<div id="admin-content">
+    <div class="admin-card">
+        <div class="header-section">
+            <h1 style="color:var(--jp-red); margin:0; font-size:20px;">LPK TAKASHI - DASHBOARD UTAMA</h1>
+            <a href="rekap_individu.html" class="btn btn-rekap">📊 LIHAT REKAP PER SISWA</a>
+        </div>
+
+        <div class="section-box">
+            <strong>👤 Kelola Siswa:</strong>
+            <div style="display:flex; gap:10px; margin: 10px 0;">
+                <input type="text" id="newStudentName" placeholder="Nama Baru..." style="flex:1; padding:8px;">
+                <button class="btn" style="background:var(--dark)" onclick="addMasterStudent()">TAMBAH</button>
+            </div>
+            <div id="student-list-tags"></div>
+        </div>
+
+        <div class="section-box" style="display:flex; gap:10px; align-items:center;">
+            <strong>🔍 Filter Data:</strong>
+            <input type="text" id="filterName" placeholder="Nama..." onkeyup="refreshTable()" style="padding:8px;">
+            <input type="text" id="filterMonth" placeholder="Bulan (M/YYYY)" onkeyup="refreshTable()" style="padding:8px;">
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr><th>Tanggal</th><th>Nama</th><th>Masuk</th><th>Pulang</th><th>Status</th><th>Aksi</th></tr>
+                </thead>
+                <tbody id="attendanceData"></tbody>
+            </table>
+        </div>
+
+        <div style="text-align:right;">
+            <button class="btn btn-logout" onclick="logout()">KELUAR / LOGOUT</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // CEK SESI LOGIN SAAT HALAMAN DIBUKA
+    window.onload = function() {
+        if (sessionStorage.getItem('statusLogin') === 'sukses') {
+            tampilkanDashboard();
+        }
+    };
+
+    function checkPassword() {
+        if (document.getElementById('passInput').value === "admin123") {
+            sessionStorage.setItem('statusLogin', 'sukses');
+            tampilkanDashboard();
+        } else { alert("Password Salah!"); }
+    }
+
+    function tampilkanDashboard() {
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('admin-content').style.display = 'block';
+        initData();
+    }
+
+    function logout() {
+        sessionStorage.removeItem('statusLogin');
+        location.reload();
+    }
+
+    // FUNGSI DATA
+    function initData() {
+        let list = JSON.parse(localStorage.getItem('takashi_siswa_list')) || ["AHMAD ABDUL WAHAB","AHMAD MUSOFA","AHMAD OKI RIAN","AHMAD ZAINUDDIN","MARUM DARMA PUTRA","AWALIYAH SUSY","BRILIAN ADHI S","FAJAR NUR RAHMAT","FARIZQI ASNAN FAJAR","GALIH RAHMDAN M","HAIRRARMATULLOH","IBNU HIBBAN","ILYASIN","IQBAL ULIL ALBAB","LUKMAT HIDAYAT","NAJIHA SYAEFATUN N","RAKHMAT SYAIFUL AFIF","RIFQI QOLBU A'INUN","RIZKI ADITYA PUTRA","SRI FATONAH","TASYA APRILIA","TATAG SESAR ARIYANTO","IQBAL AJI PANGESTU","A. NAJIB AL WAHID","MUSTOPA","ZULFA KHUSNA MAABA","AHMAD MUNGAWIN","M. IRHAM RESTU"];
+        localStorage.setItem('takashi_siswa_list', JSON.stringify(list));
+        renderTags();
+        refreshTable();
+    }
+
+    function renderTags() {
+        let list = JSON.parse(localStorage.getItem('takashi_siswa_list'));
+        let html = "";
+        list.forEach((n, i) => { html += `<div class="tag">${n} <b style="color:red;cursor:pointer" onclick="delSiswa(${i})">×</b></div>`; });
+        document.getElementById('student-list-tags').innerHTML = html;
+    }
+
+    function addMasterStudent() {
+        let name = document.getElementById('newStudentName').value.toUpperCase();
+        if(!name) return;
+        let list = JSON.parse(localStorage.getItem('takashi_siswa_list'));
+        list.push(name);
+        localStorage.setItem('takashi_siswa_list', JSON.stringify(list));
+        document.getElementById('newStudentName').value = "";
+        renderTags();
+    }
+
+    function delSiswa(i) {
+        let list = JSON.parse(localStorage.getItem('takashi_siswa_list'));
+        list.splice(i, 1);
+        localStorage.setItem('takashi_siswa_list', JSON.stringify(list));
+        renderTags();
+    }
+
+    function refreshTable() {
+        let db = JSON.parse(localStorage.getItem('takashi_master_db')) || [];
+        let fName = document.getElementById('filterName').value.toLowerCase();
+        let fMonth = document.getElementById('filterMonth').value;
+        let html = "";
+        db.slice().reverse().forEach((item, index) => {
+            if(item.name.toLowerCase().includes(fName) && (fMonth ? item.date.includes(fMonth) : true)) {
+                html += `<tr><td>${item.date}</td><td>${item.name}</td><td>${item.in}</td><td>${item.out}</td><td><span class="badge ${item.status.toLowerCase()}">${item.status}</span></td><td><button onclick="delEntry(${db.length-1-index})" style="color:red;border:none;background:none;cursor:pointer;">×</button></td></tr>`;
+            }
+        });
+        document.getElementById('attendanceData').innerHTML = html;
+    }
+
+    function delEntry(i) {
+        let db = JSON.parse(localStorage.getItem('takashi_master_db'));
+        db.splice(i, 1);
+        localStorage.setItem('takashi_master_db', JSON.stringify(db));
+        refreshTable();
+    }
+</script>
+</body>
+</html>

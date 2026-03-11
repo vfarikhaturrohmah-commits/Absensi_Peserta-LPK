@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rekap Per Siswa - LPK Takashi</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script>
+    <style>
+        :root { --jp-red: #bc002d; --dark: #2d3436; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .header { text-align: center; border-bottom: 3px solid var(--jp-red); padding-bottom: 15px; margin-bottom: 20px; }
+        .filter-box { background: #f8f9fa; padding: 20px; border-radius: 10px; display: flex; gap: 15px; align-items: flex-end; margin-bottom: 20px; border: 1px solid #ddd; }
+        .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+        .stat-card { padding: 15px; border-radius: 8px; color: white; text-align: center; font-weight: bold; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { background: var(--dark); color: white; padding: 12px; }
+        td { padding: 12px; border-bottom: 1px solid #eee; text-align: center; }
+        .btn { padding: 12px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; color: white; text-decoration: none; display: inline-block; transition: 0.3s; }
+        .btn:hover { opacity: 0.9; }
+        .btn-back { background: #636e72; margin-bottom: 15px; }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; text-transform: uppercase; border: 1px solid #ccc; background: #f9f9f9; }
+        
+        @media print {
+            .btn, .filter-box, .btn-back { display: none !important; }
+            .container { box-shadow: none; border: none; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <a href="admin.html" class="btn btn-back">← KEMBALI KE DASHBOARD</a>
+
+    <div class="header">
+        <h1 style="color:var(--jp-red); margin:0;">LAPORAN KEHADIRAN SISWA</h1>
+        <p>LPK TAKASHI JAPAN</p>
+    </div>
+
+    <div class="filter-box">
+        <div style="flex:1">
+            <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:5px;">PILIH SISWA:</label>
+            <select id="selectStudent" style="width:100%; padding:10px; border-radius:5px; border:1px solid #ccc;">
+                <option value="">-- Pilih Nama --</option>
+            </select>
+        </div>
+        <div style="flex:1">
+            <label style="display:block; font-size:12px; font-weight:bold; margin-bottom:5px;">PILIH BULAN:</label>
+            <input type="month" id="filterMonth" style="width:95%; padding:10px; border-radius:5px; border:1px solid #ccc;">
+        </div>
+        <button onclick="generateReport()" class="btn" style="background:var(--jp-red)">TAMPILKAN</button>
+    </div>
+
+    <div id="hasilRekap" style="display:none;">
+        <h2 id="namaSiswaJudul" style="text-align:center; color:var(--dark);"></h2>
+        
+        <div class="stat-grid">
+            <div class="stat-card" style="background:#27ae60;">HADIR: <span id="rHadir">0</span></div>
+            <div class="stat-card" style="background:#f1c40f;">SAKIT: <span id="rSakit">0</span></div>
+            <div class="stat-card" style="background:#3498db;">IZIN: <span id="rIzin">0</span></div>
+            <div class="stat-card" style="background:#e74c3c;">ALPA: <span id="rAlpa">0</span></div>
+        </div>
+
+        <table id="tableData">
+            <thead>
+                <tr>
+                    <th>TANGGAL</th>
+                    <th>MASUK</th>
+                    <th>PULANG</th>
+                    <th>STATUS</th>
+                </tr>
+            </thead>
+            <tbody id="isiTabel"></tbody>
+        </table>
+
+        <div style="margin-top:20px; text-align:right;">
+            <button class="btn" style="background:#27ae60;" onclick="unduhExcel()">📥 SIMPAN EXCEL LENGKAP</button>
+            <button class="btn" style="background:var(--dark);" onclick="window.print()">📄 CETAK PDF</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1. Inisialisasi Halaman
+    window.onload = function() {
+        // Cek Login dari Dashboard
+        if (sessionStorage.getItem('statusLogin') !== 'sukses') {
+            window.location.href = "admin.html";
+            return;
+        }
+
+        // Muat Daftar Siswa dari Dashboard
+        let listSiswa = JSON.parse(localStorage.getItem('takashi_siswa_list')) || [];
+        let select = document.getElementById('selectStudent');
+        
+        listSiswa.sort().forEach(nama => {
+            let opt = document.createElement('option');
+            opt.value = nama;
+            opt.innerHTML = nama;
+            select.appendChild(opt);
+        });
+
+        // Set Default Bulan Sekarang
+        let d = new Date();
+        document.getElementById('filterMonth').value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    };
+
+    // 2. Fungsi Tampilkan Data
+    function generateReport() {
+        let nama = document.getElementById('selectStudent').value;
+        let monthRaw = document.getElementById('filterMonth').value; 
+        
+        if(!nama || !monthRaw) {
+            alert("Harap Pilih Nama Siswa dan Bulan!");
+            return;
+        }
+
+        let db = JSON.parse(localStorage.getItem('takashi_master_db')) || [];
+        let [year, month] = monthRaw.split('-');
+        let queryDate = `${parseInt(month)}/${year}`; 
+
+        let filtered = db.filter(item => item.name === nama && item.date.includes(queryDate));
+
+        if (filtered.length === 0) {
+            alert("Data tidak ditemukan untuk periode ini.");
+            document.getElementById('hasilRekap').style.display = 'none';
+            return;
+        }
+
+        // Urutkan Tanggal
+        filtered.sort((a, b) => parseInt(a.date.split('/')[0]) - parseInt(b.date.split('/')[0]));
+
+        let html = "";
+        let c = { Hadir: 0, Sakit: 0, Izin: 0, Alpa: 0 };
+
+        filtered.forEach(item => {
+            let s = item.status.toUpperCase();
+            if(s === "HADIR" || s === "PULANG") c.Hadir++;
+            else if(s === "SAKIT") c.Sakit++;
+            else if(s === "IZIN") c.Izin++;
+            else if(s === "ALPA") c.Alpa++;
+
+            html += `<tr>
+                <td><b>${item.date}</b></td>
+                <td style="color:green; font-weight:bold;">${item.in || '-'}</td>
+                <td style="color:blue; font-weight:bold;">${item.out || '-'}</td>
+                <td><span class="badge">${item.status}</span></td>
+            </tr>`;
+        });
+
+        document.getElementById('namaSiswaJudul').innerText = `REKAP ABSENSI: ${nama}`;
+        document.getElementById('rHadir').innerText = c.Hadir;
+        document.getElementById('rSakit').innerText = c.Sakit;
+        document.getElementById('rIzin').innerText = c.Izin;
+        document.getElementById('rAlpa').innerText = c.Alpa;
+        document.getElementById('isiTabel').innerHTML = html;
+        document.getElementById('hasilRekap').style.display = 'block';
+    }
+
+    // 3. Fungsi Ekspor Excel Lengkap dengan Nama
+    function unduhExcel() {
+        let nama = document.getElementById('selectStudent').value;
+        let bulan = document.getElementById('filterMonth').value;
+        
+        // Header Excel
+        let infoData = [
+            ["LAPORAN REKAPITULASI ABSENSI SISWA"],
+            ["LPK TAKASHI JAPAN"],
+            [""],
+            ["NAMA SISWA", ": " + nama],
+            ["PERIODE BULAN", ": " + bulan],
+            [""],
+            ["RINGKASAN STATUS:"],
+            ["HADIR", document.getElementById('rHadir').innerText],
+            ["SAKIT", document.getElementById('rSakit').innerText],
+            ["IZIN", document.getElementById('rIzin').innerText],
+            ["ALPA", document.getElementById('rAlpa').innerText],
+            [""],
+            ["DATA DETAIL:"],
+        ];
+
+        let wb = XLSX.utils.book_new();
+        let ws = XLSX.utils.aoa_to_sheet(infoData);
+        
+        // Tambahkan Tabel di bawah info
+        let tabel = document.getElementById("tableData");
+        XLSX.utils.sheet_add_dom(ws, tabel, { origin: "A14" });
+
+        XLSX.utils.book_append_sheet(wb, ws, "Rekap Absensi");
+        XLSX.writeFile(wb, `Rekap_Absen_${nama}_${bulan}.xlsx`);
+    }
+</script>
+</body>
+</html>
